@@ -34,20 +34,77 @@ defmodule Hangman.Impl.Game do
 @spec make_move(t, String.t) :: {t, Type.tally}
   def make_move(game = %{game_state: state}, _guess)
   when state in [:won, :lost] do
-    {game, tally(game)}
+
+    game |> return_with_tally
+
+  end
+
+  def make_move(game, guess) do
+    accept_guess(game, guess, MapSet.member?(game.used, guess))
+    |> return_with_tally()
+  end
+######################################################################
+
+defp accept_guess(game, _guess, _alreadyused = true) do
+  %{game | game_state: :already_used}
+end
+
+defp accept_guess(game, guess, _alreadyused = false) do
+  %{game | used: MapSet.put(game.used, guess)}
+  |> score_guess(Enum.member?(game.letters, guess))
+end
+
+#################################################################
+
+
+  defp score_guess(game,_good_guess = true) do
+    # guessed all letters? -> %{game | game_state: :won} if not : %{game | game_state: :good_guess}
+    new_state = maybe_won(MapSet.subset?(MapSet.new(game.letters), game.used))
+    %{game | game_state: new_state}
+  end
+  defp score_guess(game = %{ turns_left: 1}, _good_guess ) do
+    %{game | game_state: :lost, turns_left: 0}
+
+  end
+  defp score_guess(game, _good_guess = false) do
+    %{game | game_state: :bad_guess, turns_left: game.turns_left - 1}
+
   end
 
 
 
+  defp maybe_won(true), do:  :won
+  defp maybe_won(false), do: :good_guess
 
 
-  defp tally(game) do
+
+
+  def tally(game) do
     %{
       turns_left: game.turns_left,
       game_state: game.game_state,
-      letters: [],
+      letters: reveal_guessed_letters(game),
       used: game.used |> MapSet.to_list |> Enum.sort
     }
+
+  end
+
+  defp reveal_guessed_letters(game = %{game_state: :lost}) do
+    game.letters
+
+  end
+  defp reveal_guessed_letters(game) do
+    game.letters
+    |> Enum.map(fn letter -> MapSet.member?(game.used, letter)
+    |> maybe_reveal(letter) end)
+
+  end
+
+  defp maybe_reveal(_is_letter_in_word = true, letter), do: letter
+  defp maybe_reveal(_is_letter_in_word = false, _letter), do: "_"
+
+  defp return_with_tally(game) do
+    {game, tally(game)}
   end
 
 end
